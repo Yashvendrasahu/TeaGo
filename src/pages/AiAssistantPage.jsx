@@ -22,7 +22,7 @@ export default function AiAssistantPage() {
   const [messages, setMessages] = useState([
     {
       sender: 'assistant',
-      text: `Hello! I am your TeaGo Restaurant AI Sommelier${currentTable ? ` for Table ${currentTable}` : ''}. I can recommend authentic chai blends, artisanal brews, spicy snack pairings, budget combos, or custom dietary options! What are you craving today?`,
+      text: `Arre hello dost! 👋 Kaise ho? Main hoon tumhara TeaGo Cafe Buddy${currentTable ? ` (Table ${currentTable})` : ''}! Batao aaj kya peene ya khane ka man hai — kadak masala chai, cold coffee, crispy snacks ya koi mast budget combo? Bas bolo, apun recommend karega! ☕🥪`,
       suggestedDrinkIds: ['tg-01', 'tg-08', 'tg-04']
     }
   ]);
@@ -31,12 +31,12 @@ export default function AiAssistantPage() {
   const messagesEndRef = useRef(null);
 
   const quickChips = [
-    'Recommend top bestseller',
-    'Under ₹100 combo',
-    'Strong kadak tea',
-    'Best snack with tea',
-    'Refreshing iced brew',
-    'Low sugar & healthy'
+    'Bhai kuch mast recommend karo!',
+    'Under ₹100 ka badhiya combo',
+    'Ekdum kadak adrak chai',
+    'Chai ke sath kya snack lu?',
+    'Thandi cold coffee pilao',
+    'Low sugar & healthy options'
   ];
 
   const scrollToBottom = () => {

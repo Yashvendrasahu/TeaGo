@@ -380,78 +380,26 @@ export const db = {
           };
         }
 
-        // If email rate limit is exceeded or email confirmation is pending
-        if (error && (error.message?.includes('rate limit') || error.message?.includes('email'))) {
-          console.warn('Supabase email rate limit triggered, creating direct customer profile:', error.message);
-          const fallbackId = `usr-${Date.now()}`;
-          const fallbackUser = {
-            id: fallbackId,
-            email: cleanEmail,
-            name: cleanName,
-            phone: cleanPhone,
-            role: 'customer',
-            loyaltyTier: 'Silver Member',
-            completedOrdersCount: 0,
-            unlockedRewards: [
-              {
-                id: `rew-${Date.now()}`,
-                title: '₹10 Welcome Gift',
-                discountAmount: 10,
-                code: 'WELCOME10',
-                isUnlocked: true,
-                isRedeemed: false,
-                desc: 'Welcome voucher for your first self-order!'
-              }
-            ],
-            favoriteProductIds: []
-          };
-
-          // Save to memory
-          memoryDb.users.push(fallbackUser);
-
-          return {
-            success: true,
-            user: fallbackUser,
-            session: { token: `mem-token-${Date.now()}` }
-          };
+        if (error) {
+          console.warn('Supabase auth signUp error:', error.message);
+          if (error.message?.toLowerCase().includes('rate limit')) {
+            return {
+              success: false,
+              error: 'Supabase email rate limit exceeded. Please turn OFF "Confirm email" in Supabase (Authentication > Providers > Email) to enable instant signups.'
+            };
+          }
+          return { success: false, error: error.message };
         }
 
-        return { success: false, error: error?.message || 'Sign up failed' };
+        return { success: false, error: 'Sign up failed. Please try again.' };
       } catch (err) {
         console.warn('Supabase auth signUp exception:', err.message);
-        
-        // Handle rate limit exception gracefully
-        if (err.message?.includes('rate limit') || err.message?.includes('email')) {
-          const fallbackUser = {
-            id: `usr-${Date.now()}`,
-            email: cleanEmail,
-            name: cleanName,
-            phone: cleanPhone,
-            role: 'customer',
-            loyaltyTier: 'Silver Member',
-            completedOrdersCount: 0,
-            unlockedRewards: [
-              {
-                id: `rew-${Date.now()}`,
-                title: '₹10 Welcome Gift',
-                discountAmount: 10,
-                code: 'WELCOME10',
-                isUnlocked: true,
-                isRedeemed: false,
-                desc: 'Welcome voucher for your first self-order!'
-              }
-            ],
-            favoriteProductIds: []
-          };
-          memoryDb.users.push(fallbackUser);
-          return {
-            success: true,
-            user: fallbackUser,
-            session: { token: `mem-token-${Date.now()}` }
-          };
-        }
-
-        return { success: false, error: err.message };
+        return {
+          success: false,
+          error: err.message?.toLowerCase().includes('rate limit')
+            ? 'Supabase email rate limit exceeded. Please turn OFF "Confirm email" in Supabase (Authentication > Providers > Email).'
+            : err.message
+        };
       }
     }
 
@@ -479,6 +427,143 @@ export const db = {
     };
     memoryDb.users.push(newUser);
     return { success: true, user: newUser, session: { token: `mem-token-${Date.now()}` } };
+  },
+
+  // SUPABASE EMAIL OTP AUTH
+  async sendOtp({ email, name, phone }) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = name || cleanEmail.split('@')[0] || 'Tea Lover';
+    const cleanPhone = phone || '';
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithOtp({
+          email: cleanEmail,
+          options: {
+            shouldCreateUser: true,
+            data: { name: cleanName, phone: cleanPhone, role: 'customer' }
+          }
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        return { success: true, message: `6-digit OTP code sent to ${cleanEmail}! 📩` };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    // In-memory demo fallback for OTP
+    return { success: true, message: `6-digit OTP code sent to ${cleanEmail}! (Demo code: 123456)` };
+  },
+
+  async verifyOtp({ email, token, name, phone }) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = name || cleanEmail.split('@')[0] || 'Tea Lover';
+    const cleanPhone = phone || '';
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.verifyOtp({
+          email: cleanEmail,
+          token: token.trim(),
+          type: 'email'
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (data?.user) {
+          // Fetch or upsert profile
+          let userProfile = null;
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (!prof) {
+            await supabase.from('profiles').upsert({
+              id: data.user.id,
+              email: cleanEmail,
+              name: cleanName,
+              phone: cleanPhone,
+              role: 'customer',
+              loyalty_tier: 'Silver Member',
+              completed_orders_count: 0,
+              unlocked_rewards: [
+                {
+                  id: `rew-${Date.now()}`,
+                  title: '₹10 Welcome Gift',
+                  discountAmount: 10,
+                  code: 'WELCOME10',
+                  isUnlocked: true,
+                  isRedeemed: false,
+                  desc: 'Welcome voucher for your first self-order!'
+                }
+              ],
+              favorite_product_ids: []
+            });
+          }
+
+          userProfile = {
+            id: data.user.id,
+            email: data.user.email,
+            name: prof?.name || data.user.user_metadata?.name || cleanName,
+            phone: prof?.phone || data.user.user_metadata?.phone || cleanPhone,
+            avatarUrl: prof?.avatar_url || '',
+            role: prof?.role || data.user.user_metadata?.role || 'customer',
+            loyaltyTier: prof?.loyalty_tier || 'Silver Member',
+            completedOrdersCount: prof?.completed_orders_count || 0,
+            unlockedRewards: prof?.unlocked_rewards || [],
+            favoriteProductIds: prof?.favorite_product_ids || []
+          };
+
+          return {
+            success: true,
+            user: userProfile,
+            session: data.session
+          };
+        }
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    // In-memory demo verify fallback
+    if (token === '123456' || token.length >= 6) {
+      let found = memoryDb.users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (!found) {
+        found = {
+          id: `usr-${Date.now()}`,
+          email: cleanEmail,
+          name: cleanName,
+          phone: cleanPhone,
+          role: 'customer',
+          loyaltyTier: 'Silver Member',
+          completedOrdersCount: 0,
+          unlockedRewards: [
+            {
+              id: `rew-${Date.now()}`,
+              title: '₹10 Welcome Gift',
+              discountAmount: 10,
+              code: 'WELCOME10',
+              isUnlocked: true,
+              isRedeemed: false,
+              desc: 'Welcome voucher for your first self-order!'
+            }
+          ],
+          favoriteProductIds: []
+        };
+        memoryDb.users.push(found);
+      }
+      return { success: true, user: found, session: { token: `mem-token-${Date.now()}` } };
+    }
+
+    return { success: false, error: 'Invalid or expired OTP code.' };
   },
 
   async signIn({ email, password }) {

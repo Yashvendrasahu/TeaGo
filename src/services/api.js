@@ -6,7 +6,10 @@
 import { supabaseClient } from './supabaseClient';
 import { productsService, ordersService, storageService } from './supabaseService';
 
-const API_BASE = '/api';
+const rawApiUrl = import.meta.env.VITE_API_URL || '';
+const API_BASE = rawApiUrl
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`)
+  : '/api';
 
 export const api = {
   // Health & Server Status
@@ -81,10 +84,18 @@ export const api = {
   // Supabase Auth: Sign Up (Directly Creates in auth.users and profiles)
   async signUp(email, password, name, phone) {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanName = name || cleanEmail.split('@')[0] || 'Tea Lover';
-    const cleanPhone = phone || '';
+    const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'Tea Lover';
+    const cleanPhone = (phone || '').trim();
 
-    // Direct Supabase Client Auth
+    if (!cleanEmail || !password) {
+      return { success: false, error: 'Email and password are required.' };
+    }
+
+    if (password.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+
+    // 1. Direct Supabase Client Auth
     if (supabaseClient) {
       try {
         const { data, error } = await supabaseClient.auth.signUp({
@@ -95,10 +106,22 @@ export const api = {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          return { success: false, error: error.message };
+        }
 
-        // Ensure profile is inserted in public.profiles table
+        // Insert / Upsert into profiles table
         if (data?.user) {
+          const welcomeReward = {
+            id: `rew-${Date.now()}`,
+            title: '₹10 Welcome Gift',
+            discountAmount: 10,
+            code: 'WELCOME10',
+            isUnlocked: true,
+            isRedeemed: false,
+            desc: 'Welcome voucher for your first self-order!'
+          };
+
           try {
             await supabaseClient.from('profiles').upsert({
               id: data.user.id,
@@ -108,21 +131,11 @@ export const api = {
               role: 'customer',
               loyalty_tier: 'Silver Member',
               completed_orders_count: 0,
-              unlocked_rewards: [
-                {
-                  id: `rew-${Date.now()}`,
-                  title: '₹10 Welcome Gift',
-                  discountAmount: 10,
-                  code: 'WELCOME10',
-                  isUnlocked: true,
-                  isRedeemed: false,
-                  desc: 'Welcome voucher for your first self-order!'
-                }
-              ],
+              unlocked_rewards: [welcomeReward],
               favorite_product_ids: []
             });
           } catch (profErr) {
-            console.warn('Direct profile upsert:', profErr.message);
+            console.warn('Direct profile upsert error (trigger may handle it):', profErr.message);
           }
 
           return {
@@ -135,38 +148,153 @@ export const api = {
               role: 'customer',
               loyaltyTier: 'Silver Member',
               completedOrdersCount: 0,
-              unlockedRewards: [
-                {
-                  id: `rew-${Date.now()}`,
-                  title: '₹10 Welcome Gift',
-                  discountAmount: 10,
-                  code: 'WELCOME10',
-                  isUnlocked: true,
-                  isRedeemed: false,
-                  desc: 'Welcome voucher for your first self-order!'
-                }
-              ],
+              unlockedRewards: [welcomeReward],
               favoriteProductIds: []
             },
             session: data.session
           };
         }
       } catch (err) {
-        console.warn('Client-side Supabase signUp error:', err.message);
-        // Fallback to backend API
+        console.warn('Client-side Supabase signUp exception, trying backend:', err.message);
       }
     }
 
-    // Proxy through server backend
+    // 2. Proxy through server backend
     try {
       const res = await fetch(`${API_BASE}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, password, name: cleanName, phone: cleanPhone })
       });
+      const result = await res.json();
+      return result;
+    } catch (err) {
+      return { success: false, error: err.message || 'Registration failed. Please check network connection.' };
+    }
+  },
+
+  // Supabase Email OTP: Send 6-Digit Code to Email
+  async sendEmailOtp(email, name = '', phone = '') {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = name.trim() || cleanEmail.split('@')[0] || 'Tea Lover';
+    const cleanPhone = phone.trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithOtp({
+          email: cleanEmail,
+          options: {
+            shouldCreateUser: true,
+            data: { name: cleanName, phone: cleanPhone, role: 'customer' }
+          }
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        return { success: true, message: `6-Digit OTP code sent to ${cleanEmail}! 📩` };
+      } catch (err) {
+        console.warn('Client-side OTP send error:', err.message);
+      }
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, name: cleanName, phone: cleanPhone })
+      });
       return await res.json();
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Failed to send OTP.' };
+    }
+  },
+
+  // Supabase Email OTP: Verify 6-Digit Code
+  async verifyEmailOtp(email, token, name = '', phone = '') {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanToken = (token || '').trim();
+    const cleanName = name.trim() || cleanEmail.split('@')[0] || 'Tea Lover';
+    const cleanPhone = phone.trim();
+
+    if (!cleanEmail || !cleanToken) {
+      return { success: false, error: 'Email and 6-digit OTP code are required.' };
+    }
+
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient.auth.verifyOtp({
+          email: cleanEmail,
+          token: cleanToken,
+          type: 'email'
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (data?.user) {
+          const welcomeReward = {
+            id: `rew-${Date.now()}`,
+            title: '₹10 Welcome Gift',
+            discountAmount: 10,
+            code: 'WELCOME10',
+            isUnlocked: true,
+            isRedeemed: false,
+            desc: 'Welcome voucher for your first self-order!'
+          };
+
+          try {
+            await supabaseClient.from('profiles').upsert({
+              id: data.user.id,
+              email: cleanEmail,
+              name: cleanName,
+              phone: cleanPhone,
+              role: 'customer',
+              loyalty_tier: 'Silver Member',
+              completed_orders_count: 0,
+              unlocked_rewards: [welcomeReward],
+              favorite_product_ids: []
+            });
+          } catch (profErr) {
+            console.warn('Profile upsert warning:', profErr.message);
+          }
+
+          return {
+            success: true,
+            user: {
+              id: data.user.id,
+              email: cleanEmail,
+              name: cleanName,
+              phone: cleanPhone,
+              role: 'customer',
+              loyaltyTier: 'Silver Member',
+              completedOrdersCount: 0,
+              unlockedRewards: [welcomeReward],
+              favoriteProductIds: []
+            },
+            session: data.session
+          };
+        }
+      } catch (err) {
+        console.warn('Client-side verify OTP exception:', err.message);
+      }
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, token: cleanToken, name: cleanName, phone: cleanPhone })
+      });
+      return await res.json();
+    } catch (err) {
+      return { success: false, error: err.message || 'OTP verification failed.' };
     }
   },
 

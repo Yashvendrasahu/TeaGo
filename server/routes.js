@@ -22,7 +22,17 @@ apiRouter.get('/health', async (req, res) => {
   });
 });
 
-// 2. Supabase setup status & SQL helper
+// 2. Supabase setup status & Client Config
+apiRouter.get('/supabase/config', (req, res) => {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  res.json({
+    isConfigured: Boolean(url && anonKey && !url.includes('your-project')),
+    supabaseUrl: url,
+    supabaseAnonKey: anonKey
+  });
+});
+
 apiRouter.get('/supabase/status', (req, res) => {
   res.json({
     isConfigured: isSupabaseConfigured,
@@ -56,6 +66,38 @@ apiRouter.post('/storage/upload', async (req, res) => {
 });
 
 // 4. SUPABASE AUTH: USER AUTHENTICATION & PROFILES
+apiRouter.post('/auth/send-otp', async (req, res) => {
+  try {
+    const { email, name, phone } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    const result = await db.sendOtp({ email, name, phone });
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+apiRouter.post('/auth/verify-otp', async (req, res) => {
+  try {
+    const { email, token, name, phone } = req.body;
+    if (!email || !token) {
+      return res.status(400).json({ success: false, error: 'Email and OTP token are required' });
+    }
+    const result = await db.verifyOtp({ email, token, name, phone });
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 apiRouter.post('/auth/signup', async (req, res) => {
   try {
     const { email, password, name, phone } = req.body;

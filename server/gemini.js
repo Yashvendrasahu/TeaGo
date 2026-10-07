@@ -34,17 +34,21 @@ export async function askAiSommelier({ prompt, tableNumber, availableProducts, u
       isBestseller: p.isBestseller
     }));
 
-    const systemInstruction = `You are "TeaGo AI Sommelier", a warm, polite and knowledgeable digital tea master and dining assistant for "TeaGo Artisanal Cafe".
-The diner is seated at Table ${tableNumber || '01'} and is interacting through the digital table ordering menu.
+    const systemInstruction = `You are "TeaGo Dost", a super friendly, cheerful cafe buddy and personal tea expert for "TeaGo Artisanal Cafe".
+The customer is sitting at Table ${tableNumber || '01'} ordering from their phone. Talk to them like a close friend / best buddy sitting right across the table!
 
-CONVERSATION & GREETING RULES:
-1. GREETING: If the customer says "Hello", "Hi", "Hey", "Namaste", "Good morning/evening", etc., greet them warmly (e.g., "Hello! Namaste 🙏 Welcome to TeaGo Table ${tableNumber || '01'}! How can I help you today? Would you like a warm cup of authentic Chai, an artisanal coffee, or some crispy snacks?").
-2. LANGUAGE: If the customer writes in Hindi or Hinglish (e.g., "kya achha hai", "chai batao", "namaste"), reply in natural, welcoming Hinglish/Hindi. If in English, reply in English.
-3. ACCURACY: Recommend ONLY items that exist in the CURRENT RESTAURANT MENU CATALOG provided below with their exact prices in ₹.
-4. SPECIFICITY: If they ask for budget options, recommend combos with exact totals. If they ask about caffeine or sugar, provide accurate dietary info.
-5. In your response JSON, return:
-   - "reply": 2-3 sentences answering directly what the customer asked in a warm, appetizing tone.
-   - "suggestedDrinkIds": Array of exact product IDs from the catalog (e.g. ["tg-01", "tg-08"]).
+FRIENDLY PERSONA GUIDELINES:
+1. TONE: Warm, friendly, enthusiastic, relatable, respectful yet casual — like a food-loving buddy (use friendly words like "Arre dost", "Bhai", "Yaar", "Batao kya mood hai aaj", "Ek number cheez batata hoon!").
+2. GREETINGS: When they say "Hello", "Hi", "Namaste", "Hey", greet them with high energy and warmth:
+   (e.g., "Arre hello dost! Kaise ho? Table ${tableNumber || '01'} par swagat hai! Batao aaj kya peene ya khane ka man hai — ek garam kadak chai ho jaye ya kuch crispy snack?")
+3. LANGUAGE:
+   - If they ask in Hindi/Hinglish (e.g. "kuch achha batao", "chai pilao", "sasta combo", "kya special hai"), reply in natural, fun, conversational Hinglish!
+   - If they ask in English, reply in warm, cheerful, friendly conversational English with the same buddy vibe.
+4. HONEST SUGGESTIONS: Give genuine foodie recommendations! Mention exact item names and prices in ₹ (e.g. "Special Kulhad Masala Chai sirf ₹45 me").
+5. PAIRINGS: Suggest classic combos like Chai + Samosa, Filter Coffee + Sandwich, Kadak Adrak Chai + Maska Bun.
+6. JSON OUTPUT FORMAT:
+   - "reply": 2-3 fun, appetizing, friendly sentences directly answering their craving like a best friend.
+   - "suggestedDrinkIds": Array of matching product IDs from the catalog below so they can 1-tap add to order.
 
 CURRENT RESTAURANT MENU CATALOG:
 ${JSON.stringify(simplifiedMenu, null, 2)}
@@ -132,29 +136,29 @@ Respond in JSON with:
 function fallbackSommelierResponse(prompt, products = [], tableNumber = '01') {
   const lower = (prompt || '').trim().toLowerCase();
   
-  // 1. GREETING INTENTS (e.g. Hello, Hi, Hey, Namaste, Good morning, etc.)
+  // 1. GREETINGS (Hello, Hi, Hey, Namaste, etc.)
   const isGreeting = /^(hello|hi|hey|heyy|namaste|namaskar|pranam|good\s*(morning|evening|afternoon)|hola|kaise\s*ho|yo|hii|hiii)\b/i.test(lower) ||
     lower === 'hello' || lower === 'hi' || lower === 'hey' || lower === 'namaste';
 
   if (isGreeting) {
     return {
-      reply: `Hello! Namaste 🙏 Welcome to TeaGo Table ${tableNumber}! How can I assist you today? Would you like a piping hot cup of Kadak Chai, an artisanal Coffee, or some crispy Snacks?`,
-      suggestedDrinkIds: ['tg-01', 'tg-04', 'tg-08']
+      reply: `Arre hello dost! Kaise ho? Table ${tableNumber} par swagat hai! Batao aaj kya peene ya khane ka mood hai — ek kadak kulhad chai lagayein ya kuch mast crispy snack? ☕✨`,
+      suggestedDrinkIds: ['tg-01', 'tg-08', 'tg-04']
     };
   }
 
   // 2. GRATITUDE / THANKS INTENTS
   if (lower.includes('thank') || lower.includes('shukriya') || lower.includes('dhanyawad') || lower.includes('thx')) {
     return {
-      reply: `You're very welcome! 😊 Enjoy your time at TeaGo Table ${tableNumber}. Let me know if you need anything else!`,
+      reply: `Arre welcome mere bhai! 😊 Table ${tableNumber} par aaram se enjoy karo. Kuch aur chahiye ho to bas bata dena, apun hamesha haazir hai!`,
       suggestedDrinkIds: []
     };
   }
 
   // 3. BESTSELLER / SPECIAL INQUIRIES
-  if (lower.includes('special') || lower.includes('bestseller') || lower.includes('popular') || lower.includes('kya achha hai') || lower.includes('recommend')) {
+  if (lower.includes('special') || lower.includes('bestseller') || lower.includes('popular') || lower.includes('kya achha hai') || lower.includes('recommend') || lower.includes('kuch achha')) {
     return {
-      reply: `Our top cafe specials for Table ${tableNumber} are the Special Kulhad Masala Chai (₹45), Irani Maska Bun (₹45), and Crispy Samosas (₹50)!`,
+      reply: `Dost, bina soche hamari Special Kulhad Masala Chai (₹45) ke sath Garama-Garam Crispy Samosa (₹50) ya Irani Maska Bun (₹45) order kar lo, din ban jayega! 😋`,
       suggestedDrinkIds: ['tg-01', 'tg-09', 'tg-08']
     };
   }
@@ -172,41 +176,41 @@ function fallbackSommelierResponse(prompt, products = [], tableNumber = '01') {
     const topMatches = matchingProducts.slice(0, 3);
     const namesWithPrices = topMatches.map(p => `${p.name} (₹${p.price})`).join(', ');
     return {
-      reply: `Based on your request, I recommend our fresh ${namesWithPrices}. They are freshly prepared for Table ${tableNumber}!`,
+      reply: `Bhai tumhari pasand ke hisab se hamara fresh ${namesWithPrices} ekdum perfect rahega! Table ${tableNumber} par garam-garam bhejte hain!`,
       suggestedDrinkIds: topMatches.map(p => p.id)
     };
   }
 
   if (lower.includes('100') || lower.includes('budget') || lower.includes('cheap') || lower.includes('sasta') || lower.includes('combo')) {
     return {
-      reply: `For great value under ₹100, our Special Kulhad Masala Chai (₹45) paired with Crispy Samosas (₹50) is only ₹95 total!`,
+      reply: `Arre budget ki fikar mat karo! Hamari Special Kulhad Masala Chai (₹45) aur Crispy Samosa (₹50) dono milakar sirf ₹95 me ho jayega! Ekdum solid combo hai! 🚀`,
       suggestedDrinkIds: ['tg-01', 'tg-08']
     };
   }
 
   if (lower.includes('coffee') || lower.includes('filter') || lower.includes('cold') || lower.includes('cappuccino')) {
     return {
-      reply: `For coffee lovers, our Classic South Indian Filter Coffee (₹60) and Signature Thick Cold Coffee (₹110) are the top picks!`,
+      reply: `Coffee lover ho dost? To fir South Indian Filter Coffee (₹60) ya thick wali Cold Coffee (₹110) try karo — mood ekdum fresh ho jayega! ☕🧊`,
       suggestedDrinkIds: ['tg-04', 'tg-06']
     };
   }
 
   if (lower.includes('chai') || lower.includes('tea') || lower.includes('kadak') || lower.includes('masala') || lower.includes('ginger') || lower.includes('adrak')) {
     return {
-      reply: `Our Special Kulhad Masala Chai (₹45) and Adrak Elaichi Kadak Chai (₹40) are brewed fresh with organic ginger and cardamom.`,
+      reply: `Bhai chai ke shaukeen ho to hamari Adrak Elaichi Kadak Chai (₹40) ya Special Kulhad Chai (₹45) try karo, ek ghoont me dil khush ho jayega! 🍵`,
       suggestedDrinkIds: ['tg-01', 'tg-02']
     };
   }
 
   if (lower.includes('snack') || lower.includes('khana') || lower.includes('food') || lower.includes('samosa') || lower.includes('pakoda') || lower.includes('sandwich') || lower.includes('bun')) {
     return {
-      reply: `For tasty quick bites, try our Crispy Samosas (₹50), Irani Maska Bun (₹45), or Grilled Cheese Corn Sandwich (₹110)!`,
+      reply: `Kuch chatpata khana hai? Crispy Samosa (₹50), Irani Maska Bun (₹45), ya Grilled Cheese Corn Sandwich (₹110) try karo, zabardast swaad hai! 🥪✨`,
       suggestedDrinkIds: ['tg-08', 'tg-09', 'tg-10']
     };
   }
 
   return {
-    reply: `I can help you explore our authentic teas, coffees, snacks, and combos for Table ${tableNumber}. What flavors or items are you in the mood for?`,
+    reply: `Batao dost, Table ${tableNumber} ke liye kya layein? Chai, Cold coffee, Snacks ya koi mast budget combo? Jo bologe sab badhiya milega! 😊`,
     suggestedDrinkIds: ['tg-01', 'tg-08', 'tg-04']
   };
 }

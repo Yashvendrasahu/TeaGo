@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
+import { supabaseClient } from '../services/supabaseClient';
 import {
   INITIAL_PRODUCTS,
   INITIAL_ORDERS,
@@ -252,6 +253,49 @@ export function AppProvider({ children }) {
   useEffect(() => {
     localStorage.setItem('teago_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Supabase Auth State Change Listener (For Magic Link click & Token auth)
+  useEffect(() => {
+    if (!supabaseClient) return;
+
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED')) {
+        let userRole = 'customer';
+        let userName = session.user.user_metadata?.name || 'Tea Lover';
+        let userPhone = session.user.user_metadata?.phone || '';
+
+        try {
+          const { data: prof } = await supabaseClient
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (prof) {
+            userRole = prof.role || userRole;
+            userName = prof.name || userName;
+            userPhone = prof.phone || userPhone;
+          }
+        } catch (e) {
+          console.warn('Profile fetch on auth state change:', e);
+        }
+
+        setUser(prev => ({
+          ...prev,
+          id: session.user.id,
+          email: session.user.email,
+          name: userName,
+          phone: userPhone,
+          role: userRole,
+          isLoggedIn: true
+        }));
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   // Sync window hash for clean navigation
   useEffect(() => {
