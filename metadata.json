@@ -1,0 +1,6 @@
+{
+  "name": "TeaGo - Artisanal Boba & Tea Ordering",
+  "description": "QR-based digital self-ordering and kitchen management system for restaurants and cafes. Scan table QR, explore menu, customize, order and track live preparation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
